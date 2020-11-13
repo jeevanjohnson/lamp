@@ -66,8 +66,8 @@ class Handlers:
 				break
 		_file = self.context[_index + 1:]
 		with open(self.data['filename'].replace('crocs','crocs2'), 'wb') as f:
-			self.file_bytes = b' '.join(_file) # this doesn't work :C
-			f.write(self.file_bytes)
+			self.file_bytes = b' '.join(_file) 
+			f.write(self.file_bytes) # this doesn't work :C
 
 
 	def render_variables(self, html_file):
