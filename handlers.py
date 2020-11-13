@@ -1,6 +1,7 @@
 import asyncio
 import config
 import socket
+import time
 
 class Handlers:
 	def __init__(self, client, context) -> None:
@@ -9,11 +10,18 @@ class Handlers:
 		self.request_type = None
 		self.path = None
 		self.params = {}
+		self.pages = {
+		'/': self.homepage, 
+		'/get_file?': self.get_file
+		}
 
 	def parse(self, context):
 		if not context:
 			return
-		_context = context.decode().replace('\r', '')
+		try:
+			_context = context.decode().replace('\r', '')
+		except Exception as e:
+			return print(str(e))
 		_context = _context.split('\n')
 		self.context = _context
 		context = _context[0].split(' ')
@@ -37,21 +45,26 @@ class Handlers:
 			html_file = f.read()
 		headers = "HTTP/1.1 200 OK\r\n"
 		headers += "Content-Type: text/html; charset=utf-8\r\n"
+		headers += "Connection: keep-alive\r\n"
 		headers += "\r\n"
 		headers += f'{html_file}\r\n\r\n'
 		return headers
 
-	def render_json(self, _json):
+	def render_json(self, json):
 		headers = "HTTP/1.1 200 OK\r\n"
-		headers += "Content-Type: text/html; charset=utf-8\r\n"
+		headers += "Content-Type: application/json\r\n"
+		headers += "Connection: keep-alive\r\n"
 		headers += "\r\n"
-		headers += f'{_json}\r\n\r\n'
+		headers += f'{json}\r\n\r\n'
 		return headers
 	
 	def homepage(self):
+		curr_time = int(time.time() * 1000)
 		headers = self.render_template(config.HOMEPAGE_HTMLFILE_PATH)
 		self.client.send((message := headers.encode()))
-		print(f'Sent the following headers: {message.decode()}')
+		this_time = int(time.time() * 1000)
+		mili = this_time - curr_time
+		print(f'Sent the following headers: {message.decode()}\nTook {mili} ms!')
 		self.client.shutdown(socket.SHUT_WR)
 		self.client.close()
 
@@ -69,14 +82,11 @@ class Handlers:
 		self.client.shutdown(socket.SHUT_WR)
 		self.client.close()
 
-	def check(self):
+	async def check(self):
 		self.parse(self.context)
 		if self.context:
 			try:
-				return {
-					'/': self.homepage,
-					'/get_file?': self.get_file
-				}.get(self.path)()
+				return self.pages.get(self.path)()
 			except:
 				return self.not_found()
 

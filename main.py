@@ -3,6 +3,8 @@ import handlers
 import config
 import asyncio
 
+# http://127.0.0.1:8000
+
 async def main():
 	s = socket(AF_INET, SOCK_STREAM)
 
@@ -20,6 +22,6 @@ async def main():
 			client = client, 
 			context = client.recv(config.PACKET_SIZE)
 		)
-		ServerObject.check()
+		await ServerObject.check()
 
 asyncio.run(main())
