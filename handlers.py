@@ -9,20 +9,33 @@ class Handlers:
 		self.context = context
 		self.request_type = None
 		self.path = None
+		self.filename = None
+		self.file_bytes = None
 		self.params = {}
+		self.data = {}
 		self.pages = {
 		'/': self.homepage, 
 		'/get_file?': self.get_file,
+		'/post': self.get_post
 		}
 
 	def parse(self, context):
 		if not context:
 			return
-		_context = context.decode().replace('\r', '')
+		try:
+			_context = context.decode().replace('\r', '')
+		except:
+			if (request_type := context.split(b' ')[0]) == b'POST':
+				self.request_type = request_type.decode()
+				self.context = context.replace(b'\r', b'').split(b'\n')
+				self.get_file_info()
+			return
 		_context = _context.split('\n')
 		self.context = _context
 		context = _context[0].split(' ')
 		self.request_type = context[0]
+		if self.request_type == "POST":
+			self.get_file_info()
 		if '?' in context[1]:
 			self.path = context[1].split('?')[0] + '?'
 			tempname = ''
@@ -37,6 +50,26 @@ class Handlers:
 			self.path = context[1]
 			return
 	
+	def get_file_info(self):
+		for line in self.context:
+			if 'Content-Disposition:' in (line := line.decode()):
+				_index = self.context.index(line.encode())
+				line = line.replace('Content-Disposition:','').replace('form-data;','')
+				tempname = ''
+				line = ' '.join(''.join(line.split(';')).split('=')).split(' ')[2:]
+				for data in line:
+					if line.index(data) + 1 & 1:
+						self.data[data] = None
+						tempname = data
+					else:
+						self.data[tempname] = data.replace('"','')
+				break
+		_file = self.context[_index + 1:]
+		with open(self.data['filename'].replace('crocs','crocs2'), 'wb') as f:
+			self.file_bytes = b' '.join(_file) # this doesn't work :C
+			f.write(self.file_bytes)
+
+
 	def render_variables(self, html_file):
 		_html_file = html_file.replace('%]','[%').split('[%')
 		for line in _html_file:
@@ -78,6 +111,16 @@ class Handlers:
 	def homepage(self):
 		curr_time = int(time.time() * 1000)
 		headers = self.render_template(config.HOMEPAGE_HTMLFILE_PATH)
+		self.client.send((message := headers.encode()))
+		this_time = int(time.time() * 1000)
+		mili = this_time - curr_time
+		print(f'Sent the following headers:\n{message.decode()}\nTook {mili} ms!')
+		self.client.shutdown(socket.SHUT_WR)
+		self.client.close()
+
+	def get_post(self):
+		curr_time = int(time.time() * 1000)
+		headers = self.render_template(config.SUCCESS_HTMLFILE_PATH)
 		self.client.send((message := headers.encode()))
 		this_time = int(time.time() * 1000)
 		mili = this_time - curr_time
