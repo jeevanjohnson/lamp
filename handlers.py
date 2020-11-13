@@ -58,7 +58,7 @@ class Handlers:
 	def render_template(self, path_to_html_file):
 		with open(path_to_html_file, 'r') as f:
 			html_file = f.read()
-		if '[%' and '%]' in html_file:
+		if '[%' in html_file and '%]' in html_file:
 			html_file = self.render_variables(html_file)
 		headers = "HTTP/1.1 200 OK\r\n"
 		headers += "Content-Type: text/html; charset=utf-8\r\n"
