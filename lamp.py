@@ -1,7 +1,9 @@
 import asyncio
 import socket
+import json
 from threading import Thread
 from typing import Union
+import os
 
 class Lamp():
 	def __init__(self, Domain: Union[type, str] = None) -> None:
@@ -14,23 +16,34 @@ class Lamp():
 	def path(self, path: str,
 			status_code: int = 200,
 			status: str = 'OK',
-			_type: str = 'text/html;'):
+			_type: str = 'text/html;',
+			req_type: str = 'GET'):
 		
+		if _type == 'html':
+			_type = 'text/html;'
+		elif _type == 'json':
+			_type = 'application/json'
+
 		def inner(func):
 			self.web_handlers[path] = {
 				'func': func,
 				'status_code': status_code,
 				'status': status,
-				'type': _type
+				'type': _type,
+				'req_type': req_type
 			}
 			return func
 		return inner
 
 	async def handle_request(self, client):
+		ctx = {}
 		req = client.recv(1024)
 		if not req:
 			return
 		parsed_req = await self.parse(req)
+		ctx['IP'] = client.getpeername()
+		ctx['params'] = parsed_req['params']
+		head = []
 		if parsed_req['path'] not in self.web_handlers:
 			return # return a default not found http requests
 		head = []
@@ -40,8 +53,14 @@ class Lamp():
 		head.append(f"Content-Type: {info['type']} charset=utf-8")
 		head.append("Connection: keep-alive")
 		head.append("")
-		# head.append(f"Content-Type: text/html; charset=utf-8")
-		head.append(await info['func']())
+		if info['type'] == 'application/json':
+			head.append(
+				json.dumps(await info['func'](ctx))
+			)
+		elif info['type'] == 'text/html;':
+			head.append(
+				await info['func'](ctx)
+			)
 
 		client.send(
 			'\r\n'.join(head).encode()
@@ -78,6 +97,14 @@ class Lamp():
 			parsed_req[_line[0].decode()] = _line[1][1:].decode()
 		return parsed_req
 	
+	def lauch_loop(*args):
+		func = args[1]
+		client = args[2]
+		loop = asyncio.new_event_loop()
+		asyncio.set_event_loop(loop)
+		loop.run_until_complete(func(client))
+		loop.close()
+
 	async def run(self, _type):
 		if type(_type) is tuple:
 			await self.run_port(_type)
@@ -85,18 +112,40 @@ class Lamp():
 			await self.run_unix(_type)
 	
 	async def run_unix(self, unix_sock: str) -> None:
-		...
-	
+		self.unix_socket = unix_sock
+		_unix = unix_sock.split('/')[2][:-5]
+		if os.path.exists(unix_sock):
+			os.remove(unix_sock)
+		
+		with socket.socket(socket.AF_UNIX) as sock:
+			sock.bind(unix_sock)
+			os.chmod(unix_sock, 0o777)
+			sock.listen(5)
+			print(
+				f"Running on http://{_unix}" \
+				if not self.domain else f"Running on https://{self.domain}"
+				
+			)
+			while True:
+				client, _ = sock.accept()
+				Thread(
+					target = self.lauch_loop,
+					args = (self.handle_request, client)
+				).start()
+
 	async def run_port(self, _config: tuple) -> None:
 		with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 			self.ip, self.port = _config
 			sock.bind(_config)
 			sock.listen(5)
+			print(
+				f"Running on http://{self.ip}:{self.port}" \
+				if not self.domain else f"Running on https://{self.domain}"
+				
+			)
 			while True:
 				client, _ = sock.accept()
-				await self.handle_request(client)
-				# loop = asyncio.get_event_loop()
-				# loop.run_until_complete(self.handle_request(client))
-				# loop.close()
-
-
+				Thread(
+					target = self.lauch_loop,
+					args = (self.handle_request, client)
+				).start()
