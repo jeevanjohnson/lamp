@@ -13,7 +13,7 @@ async def main():
 
 	s.listen(5)      
 	print("socket is listening")   
-	while True: 
+	while True:
 	
 		# Establish connection with client. 
 		client, addr = s.accept()

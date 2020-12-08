@@ -15,7 +15,7 @@ class Handlers:
 		self.data = {}
 		self.pages = {
 		'/': self.homepage, 
-		'/get_file?': self.get_file,
+		'/get_file': self.get_file,
 		'/post': self.get_post
 		}
 
@@ -37,7 +37,7 @@ class Handlers:
 		if self.request_type == "POST":
 			self.get_file_info()
 		if '?' in context[1]:
-			self.path = context[1].split('?')[0] + '?'
+			self.path = context[1].split('?')[0]
 			tempname = ''
 			_params = ' '.join(' '.join(''.join(context[1].split('?')[1]).split('=')).split('&')).split(' ')
 			for param in _params:
