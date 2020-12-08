@@ -41,7 +41,7 @@ class Lamp():
 		if not req:
 			return
 		parsed_req = await self.parse(req)
-		ctx['IP'] = client.getpeername()
+		ctx['IP'] = client.getpeername()[0]
 		ctx['params'] = parsed_req['params']
 		head = []
 		if parsed_req['path'] not in self.web_handlers:
@@ -49,21 +49,28 @@ class Lamp():
 		head = []
 		info = self.web_handlers[parsed_req['path']]
 
-		head.append(f"HTTP/1.1 {info['status_code']} {info['status']}")
-		head.append(f"Content-Type: {info['type']} charset=utf-8")
-		head.append("Connection: keep-alive")
-		head.append("")
+		head.append(f"HTTP/1.1 {info['status_code']} {info['status']}".encode())
+		head.append(f"Content-Type: {info['type']} charset=utf-8".encode())
+		
+		# if info['type'] == 'text/html;':
+		# 	head.append('Content-Type: text/css'.encode())
+		# 	head.append('Content-Type: text/javascript'.encode())
+
+		head.append("Connection: keep-alive".encode())
+		head.append("".encode())
+		__func = await info['func'](ctx)
 		if info['type'] == 'application/json':
 			head.append(
-				json.dumps(await info['func'](ctx))
+				json.dumps(__func)
 			)
 		elif info['type'] == 'text/html;':
 			head.append(
-				await info['func'](ctx)
+				__func.encode() if not isinstance(__func, bytes) else __func  
 			)
+	
 
 		client.send(
-			'\r\n'.join(head).encode()
+			b'\r\n'.join(head)
 		)
 		client.shutdown(socket.SHUT_WR)
 		client.close()
