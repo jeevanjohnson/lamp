@@ -12,7 +12,7 @@ def remove_extra_space(string: str) -> str:
 				break
 		return string[_index:]
 
-	return func(func(string)[::-1])
+	return func(func(string)[::-1])[::-1]
 
 		
 

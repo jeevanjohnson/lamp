@@ -5,6 +5,17 @@ from threading import Thread
 from typing import Callable, Union
 import os
 
+class File():
+	def __init__(self, name: str, filename: str, file_bytes: bytes) -> None:
+		self.name = name
+		self.filename = filename
+		self.file_bytes = file_bytes
+	
+	async def savefile(self, name_overwrite: str = None):
+		with open(self.filename if not name_overwrite else name_overwrite, 'wb') as fp:
+			fp.write(self.file_bytes)
+
+
 class Lamp():
 	def __init__(self, Domain: Union[type, str] = None) -> None:
 		self.domain = Domain
@@ -12,11 +23,12 @@ class Lamp():
 		self.port = None
 		self.ip = None
 		self.unix_socket = None
+		self.buffer_size = 40000000 # image reading?
 	
 	def path(self, path: str,
 			status_code: int = 200,
 			status: str = 'OK',
-			_type: str = 'text/html;',
+			_type: str = 'html',
 			req_type: list = ['GET']) -> Callable:
 		
 		if _type == 'html':
@@ -37,7 +49,7 @@ class Lamp():
 
 	async def handle_request(self, client) -> None:
 		ctx = {}
-		req = client.recv(1024)
+		req = client.recv(self.buffer_size)
 		if not req:
 			return
 		parsed_req = await self.parse(req)
@@ -51,6 +63,9 @@ class Lamp():
 
 		if parsed_req['requests_type'] not in info['req_type']:
 			return
+		
+		if parsed_req['requests_type'] == 'POST':
+			ctx['file'] = await self.check_for_file(parsed_req['body'])
 
 		head.append(f"HTTP/1.1 {info['status_code']} {info['status']}".encode())
 		head.append(f"Content-Type: {info['type']} charset=utf-8".encode())
@@ -73,6 +88,30 @@ class Lamp():
 		client.shutdown(socket.SHUT_WR)
 		client.close()
 	
+	async def check_for_file(self, body):
+		file = {}
+		for line in body:
+
+			if b'Content-Disposition' in line:
+				context = line.split(b':', 1)[1]
+				
+				for item in context.split(b' '):
+					if not item:
+						continue
+					
+					if b'=' in item:
+						_item = item.decode().split('=', 1)
+						file[_item[0]] = _item[1][1:][:-2 if ';' in _item[1] else -1]
+						continue
+		
+		file['file_bytes'] = b'\n'.join(body[3:][:-1])
+		
+		return File(
+			name = file['name'],
+			filename = file['filename'],
+			file_bytes = file['file_bytes']
+		)
+
 	async def pare_parms(self, path: str) -> tuple:
 		params = {}
 		if '?' not in path:
