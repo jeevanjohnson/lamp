@@ -1,13 +1,36 @@
-
+import re
 import os
 
-def render_template(path_to_html):
+def remove_extra_space(string):
+	def func(string):
+		_index = 0
+		for char in string:
+
+			if not char or char == ' ':
+				_index += 1
+			else:
+				break
+		return string[_index:]
+
+	return func(func(string)[::-1])
+
+		
+
+def render_template(path_to_html, **kwargs):
 	_p = path_to_html.split('/')
 	del _p[len(_p) - 1]
 	with open(path_to_html, 'r') as fp:
 		_fp = fp.read()
 	_index = 0
 	for line in (__fp := _fp.splitlines()):
+
+		var = re.search(r'//(.+?)//', line)
+		if kwargs and var:
+			for key in kwargs:
+				for _var in var.groups():
+					__fp[_index] = line.replace(_var, remove_extra_space(_var))
+					__fp[_index] = line.replace(f'//{_var}//', str(kwargs[key]))	
+
 		if '<link' not in line:
 			_index += 1
 			continue

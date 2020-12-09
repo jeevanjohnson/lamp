@@ -49,13 +49,11 @@ class Lamp():
 		head = []
 		info = self.web_handlers[parsed_req['path']]
 
+		if info['req_type'] != parsed_req['requests_type']:
+			return
+
 		head.append(f"HTTP/1.1 {info['status_code']} {info['status']}".encode())
 		head.append(f"Content-Type: {info['type']} charset=utf-8".encode())
-		
-		# if info['type'] == 'text/html;':
-		# 	head.append('Content-Type: text/css'.encode())
-		# 	head.append('Content-Type: text/javascript'.encode())
-
 		head.append("Connection: keep-alive".encode())
 		head.append("".encode())
 		__func = await info['func'](ctx)
