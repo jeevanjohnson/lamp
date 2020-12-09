@@ -28,8 +28,9 @@ def render_template(path_to_html, **kwargs):
 		if kwargs and var:
 			for key in kwargs:
 				for _var in var.groups():
-					__fp[_index] = line.replace(_var, remove_extra_space(_var))
-					__fp[_index] = line.replace(f'//{_var}//', str(kwargs[key]))	
+					if (__var := remove_extra_space(_var)) == key:
+						__fp[_index] = line.replace(_var, __var)
+						__fp[_index] = line.replace(f'//{_var}//', str(kwargs[key]))	
 
 		if '<link' not in line:
 			_index += 1
