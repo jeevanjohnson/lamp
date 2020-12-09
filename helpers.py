@@ -1,8 +1,8 @@
 import re
 import os
 
-def remove_extra_space(string):
-	def func(string):
+def remove_extra_space(string: str) -> str:
+	def func(string: str) -> str:
 		_index = 0
 		for char in string:
 
@@ -16,7 +16,7 @@ def remove_extra_space(string):
 
 		
 
-def render_template(path_to_html, **kwargs):
+def render_template(path_to_html: str, **kwargs) -> bytes:
 	_p = path_to_html.split('/')
 	del _p[len(_p) - 1]
 	with open(path_to_html, 'r') as fp:

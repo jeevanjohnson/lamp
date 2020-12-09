@@ -2,7 +2,7 @@ import asyncio
 import socket
 import json
 from threading import Thread
-from typing import Union
+from typing import Callable, Union
 import os
 
 class Lamp():
@@ -17,7 +17,7 @@ class Lamp():
 			status_code: int = 200,
 			status: str = 'OK',
 			_type: str = 'text/html;',
-			req_type: str = 'GET'):
+			req_type: list = ['GET']) -> Callable:
 		
 		if _type == 'html':
 			_type = 'text/html;'
@@ -35,7 +35,7 @@ class Lamp():
 			return func
 		return inner
 
-	async def handle_request(self, client):
+	async def handle_request(self, client) -> None:
 		ctx = {}
 		req = client.recv(1024)
 		if not req:
@@ -49,7 +49,7 @@ class Lamp():
 		head = []
 		info = self.web_handlers[parsed_req['path']]
 
-		if info['req_type'] != parsed_req['requests_type']:
+		if parsed_req['requests_type'] not in info['req_type']:
 			return
 
 		head.append(f"HTTP/1.1 {info['status_code']} {info['status']}".encode())
@@ -73,7 +73,7 @@ class Lamp():
 		client.shutdown(socket.SHUT_WR)
 		client.close()
 	
-	async def pare_parms(self, path):
+	async def pare_parms(self, path: str) -> tuple:
 		params = {}
 		if '?' not in path:
 			return (params, path)
@@ -82,7 +82,7 @@ class Lamp():
 			params[param[0]] = param[1]
 		return (params, _path[0])
 
-	async def parse(self, req: bytes) -> None:
+	async def parse(self, req: bytes) -> dict:
 		parsed_req = {}
 		_req = req.splitlines()
 		for line in _req:
@@ -102,7 +102,7 @@ class Lamp():
 			parsed_req[_line[0].decode()] = _line[1][1:].decode()
 		return parsed_req
 	
-	def lauch_loop(*args):
+	def lauch_loop(*args) -> None:
 		func = args[1]
 		client = args[2]
 		loop = asyncio.new_event_loop()
@@ -110,7 +110,7 @@ class Lamp():
 		loop.run_until_complete(func(client))
 		loop.close()
 
-	async def run(self, _type):
+	async def run(self, _type: Union[str, tuple]) -> None:
 		if type(_type) is tuple:
 			await self.run_port(_type)
 		else:
