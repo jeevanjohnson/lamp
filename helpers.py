@@ -5,34 +5,23 @@ import json
 def jsonify(_json: dict) -> bytes:
 	return json.dumps(_json).encode()
 
-def remove_extra_space(string: str) -> str:
-	def func(string: str) -> str:
-		_index = 0
-		for char in string:
-
-			if not char or char == ' ':
-				_index += 1
-			else:
-				break
-		return string[_index:]
-
-	return func(func(string)[::-1])[::-1]
-
 def render_template(path_to_html: str, **kwargs) -> bytes:
-	_p = path_to_html.split('/')[:-1]
+	template_path = '/'.join(path_to_html.split('/')[:-1])
+	
 	with open(path_to_html, 'r') as fp:
-		_fp = fp.read()
+		html_file = fp.read().splitlines()
+	
 	_index = 0
-	for line in (__fp := _fp.splitlines()):
-
-		var = re.search(r'//(.+?)//', line)
-		if kwargs and var:
-			for key in kwargs:
-				for _var in var.groups():
-					if (__var :=_var.strip()) == key:
-						__fp[_index] = line.replace(_var, __var)
-						__fp[_index] = line.replace(f'//{_var}//', str(kwargs[key]))	
-
+	for line in html_file:
+		if kwargs:
+			variable = re.search(r'//(.+?)//', line)
+			if variable:
+				for key in kwargs:
+					for var in variable.groups():
+						if (var_stripped := var.strip()) == key:
+							html_file[_index] = line = line.replace(var, var_stripped)
+							html_file[_index] = line = line.replace(f'//{var}//', str(kwargs[key]))
+		
 		if '<link' not in line:
 			_index += 1
 			continue
@@ -45,7 +34,7 @@ def render_template(path_to_html: str, **kwargs) -> bytes:
 		
 		if 'rel' in _types:
 			if _types['rel'] == 'stylesheet':
-				with open(f'{"/".join(_p)}/{_types["href"]}', 'r') as f:
-					__fp[_index] = "<style>" + f.read() + "</style>"
+				with open(f'{template_path}/{_types["href"]}', 'r') as f:
+					html_file[_index] = "<style>" + f.read() + "</style>"
 		_index += 1
-	return '\n'.join(__fp).encode()
+	return '\n'.join(html_file).encode()

@@ -60,6 +60,9 @@ Default_headers = {
 	405: f'HTTP/1.1 405 Method Not Allowed\r\nContent-Type: application/json charset=utf-8\r\nConnection: keep-alive\r\n\r\n{json.dumps({405: "Method Not Allowed"})}'.encode()
 }
 
+class TemplatePathNotFound(Exception):
+	pass
+
 class Error():
 	def __init__(self, func: Callable, 
 					status_code: int = 200 ,
@@ -128,7 +131,14 @@ class Lamp():
 		self.port = None
 		self.unix_sock = None
 		self.header_override = None
+		self.template_path = None
 		self.domain = domain
+	
+	def template_path(self, path: str) -> None:
+		if not os.path.exists(path):
+			raise TemplatePathNotFound(f"{path} couldn't be found")
+		
+		self.template_path = path
 
 	def error_handler(self, status_code: int = 200,
 					  content_type: str = 'HTML') -> Callable:
