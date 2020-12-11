@@ -20,7 +20,7 @@ def render_template(path_to_html: str, **kwargs) -> bytes:
 					for var in variable.groups():
 						if (var_stripped := var.strip()) == key:
 							html_file[_index] = line = line.replace(var, var_stripped)
-							html_file[_index] = line = line.replace(f'//{var}//', str(kwargs[key]))
+							html_file[_index] = line = line.replace(f'//{var_stripped}//', str(kwargs[key]))
 		
 		if '<link' not in line:
 			_index += 1
