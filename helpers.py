@@ -1,5 +1,9 @@
 import re
 import os
+import json
+
+def jsonify(_json: dict) -> bytes:
+	return json.dumps(_json).encode()
 
 def remove_extra_space(string: str) -> str:
 	def func(string: str) -> str:

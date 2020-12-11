@@ -108,7 +108,9 @@ class Route():
 
 class Content():
 	def __init__(self, **kwargs) -> None:
-		self.content = kwargs
+		if 'req' in kwargs:
+			self.header = kwargs['req']
+		
 
 	def save_file(self):
 		...
