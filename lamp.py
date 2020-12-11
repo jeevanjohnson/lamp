@@ -51,7 +51,8 @@ HTTP_STATUS_CODES = { # source of these can be found on https://www.w3.org/Proto
 
 Content_Type = { # more coming soon
 	'HTML': 'text/html;',
-	'JSON': 'application/json'
+	'JSON': 'application/json',
+	'IMAGE_JPEG': 'image/jpeg'
 }
 
 Default_headers = {
@@ -97,6 +98,8 @@ class Route():
 		self.headers += f'HTTP/1.1 {self.status_code} {HTTP_STATUS_CODES.get(self.status_code)}\r\n'.encode()
 		self.headers += f'Content-Type: {Content_Type.get(self.content_type)} charset=utf-8\r\n'.encode()
 		self.headers += b'Connection: keep-alive\r\n'
+		if self.content_type == 'IMAGE_JPEG':
+			self.headers += f'Accept-Ranges: bytes\r\n\r\n'.encode()
 		self.headers += b'\r\n'
 		if content:
 			self.headers += self.func(content)
@@ -155,6 +158,8 @@ class Lamp():
 			return parsed_data, False
 	
 	def handle_request(self, client, req: dict) -> None:
+		if len(req) < 2:
+			return
 		ctx = Content(req = req)
 		if self.header_override:
 			head = self.routes[req['route']].func(ctx)

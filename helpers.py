@@ -15,8 +15,7 @@ def remove_extra_space(string: str) -> str:
 	return func(func(string)[::-1])[::-1]
 
 def render_template(path_to_html: str, **kwargs) -> bytes:
-	_p = path_to_html.split('/')
-	_p = _p[:-1]
+	_p = path_to_html.split('/')[:-1]
 	with open(path_to_html, 'r') as fp:
 		_fp = fp.read()
 	_index = 0
@@ -26,7 +25,7 @@ def render_template(path_to_html: str, **kwargs) -> bytes:
 		if kwargs and var:
 			for key in kwargs:
 				for _var in var.groups():
-					if (__var := remove_extra_space(_var)) == key:
+					if (__var :=_var.strip()) == key:
 						__fp[_index] = line.replace(_var, __var)
 						__fp[_index] = line.replace(f'//{_var}//', str(kwargs[key]))	
 
