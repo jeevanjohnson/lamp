@@ -192,7 +192,7 @@ class Lamp():
 			client.sendall(head)
 			client.shutdown(socket.SHUT_WR)
 			client.close()
-			return # 404 not found header
+			return
 		
 		if req['method'] not in (_route := self.routes[req['route']]).methods:
 			if 405 not in self._error_handler:
