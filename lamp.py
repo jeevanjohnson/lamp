@@ -95,12 +95,16 @@ class Route():
 		self.headers = b''
 	
 	def set_headers(self, content: Union[object, bool] = None) -> None:
+		self.headers = b''
 		self.headers += f'HTTP/1.1 {self.status_code} {HTTP_STATUS_CODES.get(self.status_code)}\r\n'.encode()
 		self.headers += f'Content-Type: {Content_Type.get(self.content_type)} charset=utf-8\r\n'.encode()
 		self.headers += b'Connection: keep-alive\r\n'
+
 		if self.content_type == 'IMAGE_JPEG':
 			self.headers += f'Accept-Ranges: bytes\r\n\r\n'.encode()
+
 		self.headers += b'\r\n'
+
 		if content:
 			self.headers += self.func(content)
 		else:
