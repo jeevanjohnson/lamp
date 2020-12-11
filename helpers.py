@@ -14,11 +14,9 @@ def remove_extra_space(string: str) -> str:
 
 	return func(func(string)[::-1])[::-1]
 
-		
-
 def render_template(path_to_html: str, **kwargs) -> bytes:
 	_p = path_to_html.split('/')
-	del _p[len(_p) - 1]
+	_p = _p[:-1]
 	with open(path_to_html, 'r') as fp:
 		_fp = fp.read()
 	_index = 0
@@ -40,7 +38,7 @@ def render_template(path_to_html: str, **kwargs) -> bytes:
 		for x in parsed_line.split(' '):
 			x = x.split('=')
 			x[1] = x[1][1:][:-1]
-			_types.update({k: v for k,v in [x]})
+			_types[x[0]] = x[1]
 		
 		if 'rel' in _types:
 			if _types['rel'] == 'stylesheet':
