@@ -1,23 +1,42 @@
 # Lamp
 
-Lamp is a socketserver / webserver in py. (Specifically Python3.8.0)
-
-My goal for this project is to make something similar to flask with less limitations
-
-such as sending your own headers, custom byte sending, and more coming.
+A Asynced Webserver made with sockets! (Not Finished)
 
 Examples of using Lamp:
 
 ```py
-from lamp import Lamp, Content
+from lamp import Lamp, Connection
 
 server = Lamp()
 
-@server.route('/')
-def home(ctx: Content) -> bytes:
+@server.route(route = '/', method = ['GET'])
+async def home(conn: Connection) -> bytes:
 
-	return b'Welcome to the Webserver!'
+    conn.set_status(200)
+    conn.set_body(b'Hello World!')
+    
+    return conn.response
 
+server.run(("127.0.0.1", 5000))
+```
 
-server.run()
+1 unique thing about this webserver is you can use a regex in your path/routes as show below
+
+```py
+from lamp import Lamp, Connection
+
+server = Lamp()
+
+@server.route(route = r'^/u/(?P<userid>[0-9]*)$', method = ['GET'])
+async def home(conn: Connection) -> bytes:
+    body = b'hi guys s:D'
+
+	userid = conn.args['userid'] # this came from the regex that was provided
+
+    conn.set_status(200)
+    conn.set_body(f'{userid}'.encode())
+    
+    return conn.response
+
+server.run(("127.0.0.1", 5000))
 ```

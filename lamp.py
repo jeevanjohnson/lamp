@@ -1,292 +1,173 @@
 import socket
-import os
-from typing import Callable, Union
 import asyncio
-from threading import Thread
+from typing import Union
+import os
 import json
+from helper import *
+from utlies import printc, Colors
+import re
 
-HTTP_STATUS_CODES = { # source of these can be found on https://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-	100: 'Continue',
-	101: 'Switching Protocols',
-	200: 'OK',
-	201: 'Created',
-	202: 'Accepted',
-	203: 'Non-Authoritative Information',
-	204: 'No Content',
-	205: 'Reset Content',
-	206: 'Partial Content',
-	300: 'Multiple Choices',
-	301: 'Moved Permanently',
-	302: 'Found',
-	303: 'See Other',
-	304: 'Not Modified',
-	305: 'Use Proxy',
-	306: '(Unused)', # ehhh
-	307: 'Temporary Redirect',
-	400: 'Bad Request',
-	401: 'Unauthorized',
-	402: 'Payment Required', # soon?
-	403: 'Forbidden',
-	404: 'Not Found',
-	405: 'Method Not Allowed',
-	406: 'Not Acceptable',
-	407: 'Proxy Authentication Required',
-	408: 'Request Timeout',
-	409: 'Conflict',
-	410: 'Gone',
-	411: 'Length Required',
-	412: 'Precondition Failed',
-	413: 'Request Entity Too Large',
-	414: 'Request-URI Too Long',
-	415: 'Unsupported Media Type',
-	416: 'Requested Range Not Satisfiable',
-	417: 'Expectation Failed',
-	500: 'Internal Server Error',
-	501: 'Not Implemented',
-	502: 'Bad Gateway',
-	503: 'Service Unavailable',
-	504: 'Gateway Timeout',
-	505: 'HTTP Version Not Supported'
-}
+class Connection:
+    def __init__(self, request: dict, args: dict) -> None:
+        self.request = request
+        self._response = ['HTTP/1.1 {status_code} {status}\r\n', '', b'\r\n', b'']
+        self.args = args
+    
+    def set_status(self, code: int) -> None:
+        self._response[0] = self._response[0].format(status_code = code, status = HTTP_STATUS_CODES.get(code))
 
-Content_Type = { # more coming soon
-	'HTML': 'text/html;',
-	'JSON': 'application/json',
-	'IMAGE_JPEG': 'image/jpeg'
-}
+    def add_header(self, key, value) -> None:
+        self._response[1] += f'{key}: {value}\r\n'
+    
+    def set_body(self, body: bytes) -> None:
+        self._response[3] = body
 
-Default_headers = {
-	404: f'HTTP/1.1 404 Not Found\r\nContent-Type: application/json charset=utf-8\r\nConnection: keep-alive\r\n\r\n{json.dumps({404: "Not Found"})}'.encode(),
-	405: f'HTTP/1.1 405 Method Not Allowed\r\nContent-Type: application/json charset=utf-8\r\nConnection: keep-alive\r\n\r\n{json.dumps({405: "Method Not Allowed"})}'.encode()
-}
+    @property
+    def response(self):
+        if 'Content-Length' not in self._response[1]:
+            self._response[1] += f'Content-Length: {len(self._response[3])}\r\n'
+        
+        r = b''
+        for x in self._response:
+            r += x.encode() if not isinstance(x, bytes) else x
+        
+        return r
 
-class TemplatePathNotFound(Exception):
-	pass
+class Lamp:
+    def __init__(self) -> None:
+        self.routes = {}
 
-class Error():
-	def __init__(self, func: Callable, 
-					status_code: int = 200 ,
-					content_type: str = 'HTML') -> None:
-		
-		self.func = func
-		self.status_code = status_code
-		self.content_type = content_type
-		self.headers = b''
-	
-	def set_headers(self, content: Union[object, bool] = None) -> bytes:
-		self.headers += f'HTTP/1.1 {self.status_code} {HTTP_STATUS_CODES.get(self.status_code)}\r\n'.encode()
-		self.headers += f'Content-Type: {Content_Type.get(self.content_type)} charset=utf-8\r\n'.encode()
-		self.headers += b'Connection: keep-alive\r\n'
-		self.headers += b'\r\n'
-		if content:
-			self.headers += self.func(content)
-		else:
-			self.headers += self.func()
-		
-		return self.headers
+    def route(self, route: str, domain: Union[str, bool] = None, method: list = []):
+        def inner(func):
+            
+            key = json.dumps({'route': route, 'domain': domain, 'method': method})
 
-class Route():
-	def __init__(self, func: Callable, 
-					methods: list = ['GET'],
-					status_code: int = 200 ,
-					content_type: str = 'HTML') -> None:
-		
-		self.func = func
-		self.status_code = status_code
-		self.methods = methods
-		self.content_type = content_type
-		self.headers = b''
-	
-	def set_headers(self, content: Union[object, bool] = None) -> None:
-		self.headers = b''
-		self.headers += f'HTTP/1.1 {self.status_code} {HTTP_STATUS_CODES.get(self.status_code)}\r\n'.encode()
-		self.headers += f'Content-Type: {Content_Type.get(self.content_type)} charset=utf-8\r\n'.encode()
-		self.headers += b'Connection: keep-alive\r\n'
+            self.routes[key] = func
+            
+            return func
+        return inner
+    
+    async def parse_multi(self, req):
+        req['multipart'] = {}
+        if 'Content-Type' not in req:
+            return req
+        
+        boundary = '--' + req['Content-Type'].split('boundary=', 1)[1]
 
-		if self.content_type == 'IMAGE_JPEG':
-			self.headers += f'Accept-Ranges: bytes\r\n\r\n'.encode()
+        b = req['body'].split(boundary.encode())[1:-1]
+        for part in b:
+            part = part.split(b'\r\n', 3)
+            name = part[1].split()[3].decode().split('=', 1)[1].strip('"')
+            req['multipart'][name] = part[3]
+        
+        return req
+    
+    async def parse(self, req):
+        _index = 0
+        parsed_req = {}
+        for line in (req := req.splitlines()):
+            if not _index:
+                parsed_req['method'], parsed_req['path'], parsed_req ['http_vers'] = line.decode().split(' ')
+            elif not line:
+                parsed_req['body'] = b'\r\n'.join(req[_index + 1:])
+                break
+            else:
+                line = line.decode().split(': ')
+                parsed_req[line[0]] = line[1]
+        
+            _index += 1
+        
+        parsed_req = await self.parse_multi(parsed_req)
 
-		self.headers += b'\r\n'
+        return parsed_req
 
-		if content:
-			self.headers += self.func(content)
-		else:
-			self.headers += self.func()
+    async def handler(self, client, loop):
+        _req = await loop.sock_recv(client, 1024)
+        if not _req:
+            return
+        req = await self.parse(_req)
+        if 'Content-Length' in req and int(req['Content-Length']) > 1024:
+            _req += await loop.sock_recv(client, 1000000)
+            req = await self.parse(_req)
+        
+        for key in self.routes:
+            k = json.loads(key) # brained Lawl
+            r = []
+            args = {}
+            # checks
 
-class Content():
-	def __init__(self, **kwargs) -> None:
-		if 'req' in kwargs:
-			self.header = kwargs['req']
-		
+            if k['route'][0] == '^':
+                k['route'] = re.compile(k['route'])
+                x = k['route'].match(req['path'])
+                if x:
+                    for K, V in x.groupdict().items():
+                        if not K or not V:
+                            r.append(False)
+                        else:
+                            r.append(True)
+                else:
+                    r.append(False)
+            else:
+                if req['path'] == k['route']:
+                    r.append(True)
+                else:
+                    r.append(False)
 
-	def save_file(self):
-		...
+            if k['domain']:
+                if 'Host' in req and req['Host'] == k['domain']:
+                    r.append(True)
+                else:
+                    r.append(False)
+            
+            if k['method']:
+                if req['method'] in k['method']:
+                    r.append(True)
+                else:
+                    r.append(False)
+            
+            if False in r or True not in r:
+                printc(f"Unhandled Request for: {req['Host']} | {req['path']} | {req['method']} | {req['http_vers']}", Colors.Red)
+                continue # still thinking
+            else:
+                printc(f"Request for: {req['Host']} | {req['path']} | {req['method']} | {req['http_vers']}", Colors.Green)
+                await loop.sock_sendall(client,
+                    await self.routes[key](Connection(req, args))
+                )
+                return
+    
+    def run(self, socket_type: Union[str, tuple]) -> None: # I need to find a better word for this
+        """
+        socket_type: str or tuple
+            You can decide wheather you want your web server to be on a
+            unix socket or a normal ip and port.
+            Examples:
+                run(socket_type = '/tmp/cover.sock') <- unix_socket
+                run(socket_type = ("127.0.0.1", 5000)) <- ip and port
+        """
+        async def _run():
+            
+            if not isinstance(socket_type, (str, tuple)):
+                raise Exception('Only strings and tuples can be used for socket_type')
 
+            if isinstance(socket_type, str):
+                s = socket.AF_UNIX
+                if os.path.exists(socket_type):
+                    os.remove(socket_type)
+            else:
+                s = socket.AF_INET
 
-class Lamp():
-	def __init__(self, domain: Union[str, type] = None) -> None:
-		self.routes = {}
-		self._error_handler = {}
-		self.ip = None
-		self.port = None
-		self.unix_sock = None
-		self.header_override = None
-		self.template_path = None
-		self.domain = domain
-	
-	def template_path(self, path: str) -> None:
-		if not os.path.exists(path):
-			raise TemplatePathNotFound(f"{path} couldn't be found")
-		
-		self.template_path = path
+            with socket.socket(s) as sock:
+                loop = asyncio.get_event_loop()
+                sock.bind(socket_type)
+                if isinstance(socket_type, str): os.chmod(socket_type, 0o777)
+                sock.listen(5)
+                sock.setblocking(False)
+                
+                print(f"Server is up and running on: {socket_type}") # unpack tuple
 
-	def error_handler(self, status_code: int = 200,
-					  content_type: str = 'HTML') -> Callable:
-		def inner(func):
-			self._error_handler[status_code] = Error(func, status_code, content_type)
-			return func
-		return inner	
-	
-	def route(self, path: str, methods: list = ['GET'], 
-			  status_code: int = 200, content_type: str = 'HTML') -> Callable:
-		def inner(func):
-			self.routes[path] = Route(func, methods, status_code, content_type)
-			return func
-		return inner
-
-	def check_for_file(self, parsed_data: dict) -> tuple:
-		if not parsed_data['body']:
-			return parsed_data, False
-		line = parsed_data['body'][1].decode().split(':', 1)[1].split()
-		Content_Disposition = {}
-		for item in line:
-			if '=' not in item:
-				continue
-			item = item.split('=', 1)
-			Content_Disposition[item[0]] = item[1][1:][:-2 if item[1][-1] == ';' else -1]
-		
-		parsed_data['Content_Disposition'] = Content_Disposition
-		parsed_data['body'] = parsed_data['body'][3:][:-1]
-		
-		if Content_Disposition['name'] == 'file':
-			return parsed_data, True
-		else:
-			return parsed_data, False
-	
-	def handle_request(self, client, req: dict) -> None:
-		if len(req) < 2:
-			return
-		ctx = Content(req = req)
-		if self.header_override:
-			head = self.routes[req['route']].func(ctx)
-			client.sendall(head)
-			client.shutdown(socket.SHUT_WR)
-			client.close()
-			return
-		
-		if req['route'] not in self.routes:
-			if 404 not in self._error_handler:
-				head = Default_headers.get(404)
-			else:
-				head = self._error_handler[404].set_headers(ctx)
-			client.sendall(head)
-			client.shutdown(socket.SHUT_WR)
-			client.close()
-			return
-		
-		if req['method'] not in (_route := self.routes[req['route']]).methods:
-			if 405 not in self._error_handler:
-				head = Default_headers.get(405)
-			else:
-				head = self._error_handler[405].set_headers(ctx)
-			client.sendall(head)
-			client.shutdown(socket.SHUT_WR)
-			client.close()
-			return
-		
-		_route.set_headers(ctx)
-		client.sendall(_route.headers)
-		client.shutdown(socket.SHUT_WR)
-		client.close()
-		return
-	
-	def parse_params(self, route: str) -> tuple:
-		params = {}
-		if not '?' in route:
-			return params, route
-		
-		_route = route.split('?', 1)[1].split('&')
-
-		for param in _route:
-			param = param.split('=', 1)
-			params[param[0]] = param[1]
-		
-		return params, route.split('?', 1)[0]
-	
-	def _parse(self, data: bytes) -> dict:
-		_data = data.splitlines()
-		parsed_data = {}
-		_index = 0
-		for line in _data:
-			line = line.decode()
-			if not line:
-				break
-			if not _index:
-				line = line.split()
-				parsed_data['method'] = line[0]
-				parsed_data['params'], parsed_data['route'] = self.parse_params(line[1])
-				parsed_data['http_vers'] = line[2]
-				_index += 1
-				continue
-
-			line = line.split(':')
-			parsed_data[line[0]] = line[1][1:]
-		
-			_index += 1
-			
-		parsed_data['body'] = _data[_index + 1:]
-		
-		return parsed_data
-
-	def parse_request(self, client) -> None:
-		data = client.recv(1024)
-		parsed_data = self._parse(data)
-		parsed_data = self.check_for_file(parsed_data)
-		if parsed_data[1]:
-			parsed_data = parsed_data[0]
-			for line in client.recv(1000000).splitlines():
-				parsed_data['body'].append(line)
-			parsed_data['body'] = parsed_data['body'][:-1]
-		
-		if type(parsed_data) is tuple:
-			parsed_data = parsed_data[0]
-
-		if self.domain:
-			if parsed_data['Host'] == self.domain:
-				self.handle_request(client, parsed_data)
-		else:
-			self.handle_request(client, parsed_data)
-
-	def run(self, _socket: Union[tuple, str] = ("127.0.0.1", 5000), 
-			header_override: bool = False) -> None:
-		if header_override:
-			self.header_override = header_override
-		loop = asyncio.get_event_loop()
-		if type(_socket) is tuple:
-			__socket = socket.AF_INET
-			_bind = self.ip, self.port = _socket
-		else:
-			__socket = socket.AF_UNIX
-			_bind = self.unix_sock = _socket
-			if os.path.exists(_socket):
-				os.remove(_socket)
-
-		with socket.socket(__socket) as sock:
-			sock.bind(_bind)
-			if isinstance(_bind, str):
-				os.chmod(_bind, 0o777)
-			sock.listen(5)
-
-			while True:
-				client, _ = sock.accept()
-				Thread(target = self.parse_request, args = (client,)).start()
+                while True:
+                    client, addr = await loop.sock_accept(sock)
+                    # await self.handler(client)
+                    loop.create_task(self.handler(client, loop))
+        
+        asyncio.run(_run())
