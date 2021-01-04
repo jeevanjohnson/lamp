@@ -29,7 +29,6 @@ server = Lamp()
 
 @server.route(route = r'^/u/(?P<userid>[0-9]*)$', method = ['GET'])
 async def home(conn: Connection) -> bytes:
-    body = b'hi guys s:D'
 
     userid = conn.args['userid'] # this came from the regex that was provided
 
