@@ -1,4 +1,6 @@
-HTTP_STATUS_CODES = { # source of these can be found on https://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+import json
+
+http_status_codes = { # source of these can be found on https://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 	100: 'Continue',
 	101: 'Switching Protocols',
 	200: 'OK',
@@ -40,4 +42,9 @@ HTTP_STATUS_CODES = { # source of these can be found on https://www.w3.org/Proto
 	503: 'Service Unavailable',
 	504: 'Gateway Timeout',
 	505: 'HTTP Version Not Supported'
+}
+
+default_headers = {
+	404: f'HTTP/1.1 404 Not Found\r\nContent-Type: application/json charset=utf-8\r\nConnection: keep-alive\r\n\r\n{json.dumps({404: "Not Found"})}'.encode(),
+	405: f'HTTP/1.1 405 Method Not Allowed\r\nContent-Type: application/json charset=utf-8\r\nConnection: keep-alive\r\n\r\n{json.dumps({405: "Method Not Allowed"})}'.encode()
 }

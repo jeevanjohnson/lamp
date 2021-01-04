@@ -3,18 +3,18 @@ import asyncio
 from typing import Union
 import os
 import json
-from helper import *
+from helper import http_status_codes, default_headers
 from utlies import printc, Colors
 import re
 
 class Connection:
-    def __init__(self, request: dict, args: dict) -> None:
+    def __init__(self, request: dict, args: dict = {}) -> None:
         self.request = request
         self._response = ['HTTP/1.1 {status_code} {status}\r\n', '', b'\r\n', b'']
         self.args = args
     
     def set_status(self, code: int) -> None:
-        self._response[0] = self._response[0].format(status_code = code, status = HTTP_STATUS_CODES.get(code))
+        self._response[0] = self._response[0].format(status_code = code, status = http_status_codes.get(code))
 
     def add_header(self, key, value) -> None:
         self._response[1] += f'{key}: {value}\r\n'
@@ -36,6 +36,7 @@ class Connection:
 class Lamp:
     def __init__(self) -> None:
         self.routes = {}
+        self.error_handlers = {}
 
     def route(self, route: str, domain: Union[str, bool] = None, method: list = []):
         def inner(func):
@@ -43,6 +44,14 @@ class Lamp:
             key = json.dumps({'route': route, 'domain': domain, 'method': method})
 
             self.routes[key] = func
+            
+            return func
+        return inner
+
+    def error_handler(self, code: int):
+        def inner(func):
+
+            self.routes[code] = func
             
             return func
         return inner
@@ -134,7 +143,15 @@ class Lamp:
                     await self.routes[key](Connection(req, args))
                 )
                 return
-    
+
+        if 404 in self.error_handlers:
+            er = self.error_handlers[404](Connection(req))
+        else:
+            er = default_headers.get(404)
+
+        await loop.sock_sendall(client, er)
+        return
+
     def run(self, socket_type: Union[str, tuple]) -> None: # I need to find a better word for this
         """
         socket_type: str or tuple
