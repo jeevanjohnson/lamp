@@ -31,7 +31,7 @@ server = Lamp()
 async def home(conn: Connection) -> bytes:
     body = b'hi guys s:D'
 
-	userid = conn.args['userid'] # this came from the regex that was provided
+    userid = conn.args['userid'] # this came from the regex that was provided
 
     conn.set_status(200)
     conn.set_body(f'{userid}'.encode())
