@@ -1,6 +1,6 @@
 # Lamp
 
-A Asynced Webserver made with sockets! (Not Finished)
+An asynchronous webserver made with sockets! (Not Finished)
 
 Examples of using Lamp:
 
