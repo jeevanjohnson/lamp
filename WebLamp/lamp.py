@@ -124,6 +124,7 @@ class Lamp:
             if k['route'][0] == '^':
                 k['route'] = re.compile(k['route'])
                 x = k['route'].match(req['path'])
+                args = x.groupdict()
                 if x:
                     for K, V in x.groupdict().items():
                         if not K or not V:
