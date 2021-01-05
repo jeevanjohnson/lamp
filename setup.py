@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 	long_description = fh.read()
 
 setuptools.setup(
-	name = "lamp",
+	name = "WebLamp",
 	version = "0.0.1",
 	author = "coverosu",
 	author_email = email,
