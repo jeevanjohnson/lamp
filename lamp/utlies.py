@@ -11,5 +11,5 @@ class Colors:
 	White = '\u001b[37m'
 	Reset = '\u001b[0m'
 
-def printc(message, color = Colors.White):
+def printc(message, color: Colors = Colors.White):
 	print(f"{color}{datetime.now():%H:%M:%S}: {message}{Colors.Reset}")

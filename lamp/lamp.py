@@ -3,8 +3,8 @@ import asyncio
 from typing import Union
 import os
 import json
-from helper import http_status_codes, default_headers
-from utlies import printc, Colors
+from .helper import http_status_codes, default_headers
+from .utlies import printc, Colors
 import re
 
 class Connection:
@@ -56,20 +56,20 @@ class Lamp:
             return func
         return inner
     
-    async def parse_multi(self, req):
-        req['multipart'] = {}
-        if 'Content-Type' not in req:
-            return req
-        
-        boundary = '--' + req['Content-Type'].split('boundary=', 1)[1]
-
-        b = req['body'].split(boundary.encode())[1:-1]
-        for part in b:
-            part = part.split(b'\r\n', 3)
-            name = part[1].split()[3].decode().split('=', 1)[1].strip('"')
-            req['multipart'][name] = part[3]
-        
-        return req
+    #async def parse_multi(self, req):
+    #    req['multipart'] = {}
+    #    if 'Content-Type' not in req:
+    #        return req
+    #    
+    #    boundary = '--' + req['Content-Type'].split('boundary=', 1)[1]
+    #
+    #    b = req['body'].split(boundary.encode())[1:-1]
+    #    for part in b:
+    #        part = part.split(b'\r\n', 3)
+    #        name = part[1].split()[3].decode().split('=', 1)[1].strip('"')
+    #        req['multipart'][name] = part[3]
+    #    
+    #    return req
     
     async def parse(self, req):
         _index = 0
@@ -86,7 +86,7 @@ class Lamp:
         
             _index += 1
         
-        parsed_req = await self.parse_multi(parsed_req)
+        # parsed_req = await self.parse_multi(parsed_req) # Not yet
 
         return parsed_req
 
