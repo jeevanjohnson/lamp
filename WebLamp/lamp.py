@@ -71,15 +71,31 @@ class Lamp:
     #    
     #    return req
     
+    def parse_params(self, path: str):
+        if '?' not in path:
+            return path, {}
+
+        p = (path := path.split('?', 1))[1].split('&')
+        params = {}
+
+        for param in p:
+            key, value = param.split('=', 1)
+            if value.isdecimal():
+                try: value = int(value)
+                except: value = float(value)
+            
+            params[key] = value
+        
+        return path[0], params
+    
     async def parse(self, req):
         _index = 0
         parsed_req = {}
-        for line in (req := req.splitlines()):
+        req = req.split(b'\r\n\r\n', 1)
+        for line in req[0].splitlines():
             if not _index:
                 parsed_req['method'], parsed_req['path'], parsed_req ['http_vers'] = line.decode().split(' ')
-            elif not line:
-                parsed_req['body'] = b'\r\n'.join(req[_index + 1:])
-                break
+                parsed_req['path'], parsed_req['params'] = self.parse_params(parsed_req['path'])
             else:
                 line = line.decode().split(': ')
                 parsed_req[line[0]] = line[1]
@@ -87,7 +103,7 @@ class Lamp:
             _index += 1
         
         # parsed_req = await self.parse_multi(parsed_req) # Not yet
-
+        parsed_req['body'] = req[1]
         return parsed_req
 
     async def handler(self, client, loop):
