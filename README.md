@@ -5,7 +5,7 @@ An asynchronous webserver made with sockets! (Not Finished)
 Examples of using Lamp:
 
 ```py
-from lamp import Lamp, Connection
+from WebLamp import Lamp, Connection
 
 server = Lamp()
 
@@ -23,7 +23,7 @@ server.run(("127.0.0.1", 5000))
 1 unique thing about this webserver is you can use a regex in your path/routes as show below
 
 ```py
-from lamp import Lamp, Connection
+from WebLamp import Lamp, Connection
 
 server = Lamp()
 
