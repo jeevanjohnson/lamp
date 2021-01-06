@@ -103,7 +103,10 @@ class Lamp:
             _index += 1
         
         # parsed_req = await self.parse_multi(parsed_req) # Not yet
-        parsed_req['body'] = req[1]
+        if len(req) < 2:
+            parsed_req['body'] = b''
+        else:
+            parsed_req['body'] = req[1]
         return parsed_req
 
     async def handler(self, client, loop):
@@ -124,9 +127,9 @@ class Lamp:
             if k['route'][0] == '^':
                 k['route'] = re.compile(k['route'])
                 x = k['route'].match(req['path'])
-                args = x.groupdict()
                 if x:
-                    for K, V in x.groupdict().items():
+                    args = x.groupdict()
+                    for K, V in args.items():
                         if not K or not V:
                             r.append(False)
                         else:
