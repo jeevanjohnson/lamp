@@ -56,58 +56,47 @@ class Lamp:
             return func
         return inner
     
-    #async def parse_multi(self, req):
-    #    req['multipart'] = {}
-    #    if 'Content-Type' not in req:
-    #        return req
-    #    
-    #    boundary = '--' + req['Content-Type'].split('boundary=', 1)[1]
-    #
-    #    b = req['body'].split(boundary.encode())[1:-1]
-    #    for part in b:
-    #        part = part.split(b'\r\n', 3)
-    #        name = part[1].split()[3].decode().split('=', 1)[1].strip('"')
-    #        req['multipart'][name] = part[3]
-    #    
-    #    return req
+    def parse_multi(self, boundary: str, body: bytes) -> dict:
+        disposition = {}
+        body = [x for x in body.split(boundary.encode()) if x and x != b'--\r\n']
+        for arg in body:
+            arg, content = arg.split(b'\r\n\r\n', 1)
+            arg = arg.decode().split('; ')[1:]
+            index = 0
+            for x in arg:
+                x = x.split('=', 1)
+                x[1] = x[1].strip('"')
+                arg[index] = {k: v for k, v in [x]}
+                index += 1
+            arg.append(content)
+            disposition[len(disposition) + 1] = arg
+        return disposition
     
-    def parse_params(self, path: str):
-        if '?' not in path:
-            return path, {}
-
-        p = (path := path.split('?', 1))[1].split('&')
-        params = {}
-
-        for param in p:
-            key, value = param.split('=', 1)
-            if value.isdecimal():
-                try: value = int(value)
-                except: value = float(value)
-            
-            params[key] = value
-        
-        return path[0], params
-    
-    async def parse(self, req):
-        _index = 0
-        parsed_req = {}
+    async def parse(self, req: bytes) -> dict:
+        r = {}
         req = req.split(b'\r\n\r\n', 1)
         for line in req[0].splitlines():
-            if not _index:
-                parsed_req['method'], parsed_req['path'], parsed_req ['http_vers'] = line.decode().split(' ')
-                parsed_req['path'], parsed_req['params'] = self.parse_params(parsed_req['path'])
+            if 'http_vers' not in r:
+                r['method'], r['path'], r['http_vers'] = line.decode().split(' ')
+                if '?' not in r['path']:
+                    r['params'] = {}
+                else:
+                    r['path'], params = r['path'].split('?', 1)
+                    r['params'] = {
+                        k: v for k, v in [x.split('=', 1) for x in params.split('&')]
+                    }
             else:
                 line = line.decode().split(': ')
-                parsed_req[line[0]] = line[1]
+                r[line[0]] = line[1]
         
-            _index += 1
-        
-        # parsed_req = await self.parse_multi(parsed_req) # Not yet
         if len(req) < 2:
-            parsed_req['body'] = b''
+            r['body'] = b''
+        elif 'Content-Type' in r:
+            boundary = '--' + r['Content-Type'].split('; boundary=', 1)[1]
+            r['multipart'] = self.parse_multi(boundary, req[1])
         else:
-            parsed_req['body'] = req[1]
-        return parsed_req
+            r['body'] = req[1]
+        return r
 
     async def handler(self, client, loop):
         _req = await loop.sock_recv(client, 1024)
@@ -155,8 +144,7 @@ class Lamp:
                     r.append(False)
             
             if False in r or True not in r:
-                printc(f"Unhandled Request for: {req['Host']} | {req['path']} | {req['method']} | {req['http_vers']}", Colors.Red)
-                continue # still thinking
+                continue
             else:
                 printc(f"Request for: {req['Host']} | {req['path']} | {req['method']} | {req['http_vers']}", Colors.Green)
                 await loop.sock_sendall(client,
@@ -164,6 +152,7 @@ class Lamp:
                 )
                 return
 
+        printc(f"Unhandled Request for: {req['Host']} | {req['path']} | {req['method']} | {req['http_vers']}", Colors.Red)
         if 404 in self.error_handlers:
             er = self.error_handlers[404](Connection(req))
         else:
