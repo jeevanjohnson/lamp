@@ -7,6 +7,12 @@ from .helper import http_status_codes, default_headers
 from .utlies import printc, Colors
 import re
 
+class TemplateFolderNotFound(Exception):
+    pass
+
+class TemplateNotFound(Exception):
+    pass
+
 class Connection:
     def __init__(self, request: dict, args: dict = {}) -> None:
         self.request = request
@@ -37,6 +43,47 @@ class Lamp:
     def __init__(self) -> None:
         self.routes = {}
         self.error_handlers = {}
+        self.templateDir = './templates'
+        self.regex = {
+            'htmlVars': re.compile(r'\[\[(.*)\]\]'),
+            'types': re.compile(r'^<(.*)>$')
+        }
+         
+    def renderTemplate(self, file, **kwargs):
+        """
+        There are problably better implementations of 
+        this type of stuff, but its always good to give
+        it a try!
+        """
+        if not os.path.exists(self.templateDir):
+            raise TemplateFolderNotFound()
+        if not os.path.exists(f"{self.templateDir}/{file}"):
+            raise TemplateNotFound()
+        
+        with open(f"{self.templateDir}/{file}", 'r') as f:
+            html = f.read().splitlines() # get content of html file
+            h = '\n'.join(html) # make a copy so py doesn't reference the html variable
+
+        index = 0
+        for line in h.splitlines(): # read every line to see if we need to parse it
+            
+            if (x := self.regex['htmlVars'].findall(line)):
+                for v in x:
+                    if (vv := v.strip()) in kwargs:
+                        line = line.replace(f"[[{v}]]", kwargs[vv])
+                html[index] = line
+
+            if 'link' in line and (x := self.regex['types'].findall(line)):
+                l = x[0].split()[1:]
+                link = {k: v[1:][:-1] for k, v in [z.split('=', 1) for z in l]}
+                if False not in [x in tuple(link) for x in ('type', 'rel', 'href')]:
+                    if (link['type'], link['rel']) == ('css', 'stylesheet'):
+                        with open(f"{self.templateDir}/{link.get('href')}", 'r') as css:
+                            html[index] = '<style>' + css.read() + '</style>'
+            
+            index += 1
+        
+        return '\n'.join(html)
 
     def route(self, route: str, domain: Union[str, bool] = None, method: list = []):
         def inner(func):
@@ -106,7 +153,18 @@ class Lamp:
         if 'Content-Length' in req and int(req['Content-Length']) > 1024:
             _req += await loop.sock_recv(client, 1000000)
             req = await self.parse(_req)
-        
+
+        if req['path'][-3:] == '.js':
+            conn = Connection(req)
+            del conn._response[1] # idk why this happens
+            conn._response.insert(1, '')
+            with open(f"{self.templateDir}{req['path']}") as f:
+                conn.set_body(f.read().encode())
+            conn.set_status(200)
+            conn.add_header("Content-Type", 'text/javascript')
+            await loop.sock_sendall(client, conn.response)
+            return
+
         for key in self.routes:
             k = json.loads(key) # brained Lawl
             r = []

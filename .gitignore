@@ -7,3 +7,4 @@ dist/
 WebLamp.egg-info/
 s.sh
 *.png
+templates/
