@@ -106,7 +106,7 @@ class Lamp:
             if domain:
                 domain = str(domain)
 
-            key = json.dumps({'route': str(route), 'domain': str(domain), 'method': method})
+            key = json.dumps({'route': str(route), 'domain': domain, 'method': method})
 
             self.routes[key] = func
             
