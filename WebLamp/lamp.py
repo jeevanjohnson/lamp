@@ -208,8 +208,9 @@ class Lamp:
                 
             if k['domain'] and 'Host' in req:
                 if k['domain'].startswith('re.compile'):
-                    exec('import re ; x = ' + k['domain'], (x := {}))
-                    x = x.match(req['Host'])
+                    x = {}
+                    exec('import re ; x = ' + k['domain'], x)
+                    x = x['x'].match(req['Host'])
                     if x:
                         r.append(False)
                     else:
