@@ -206,14 +206,11 @@ class Lamp:
             if k['domain'] and 'Host' in req:
                 if k['domain'].startswith('re.compile'):
                     exec('import re ; x = ' + k['domain'], (x := {}))
-                    x = x.match(req['path'])
+                    x = x.match(req['Host'])
                     if x:
-                        args = x.groupdict()
-                        for K, V in args.items():
-                            if not K or not V:
-                                r.append(False)
-                            else:
-                                r.append(True)
+                        r.append(False)
+                    else:
+                        r.append(True)
 
                 elif req['Host'] == k['domain']:
                     r.append(True)
