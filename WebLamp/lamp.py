@@ -139,7 +139,7 @@ class Lamp:
                 data.append(x[1])
 
             layout.append('content')
-            data.append(content)
+            data.append(content[:-2])
             multi.layout.append(layout)
             multi.data.append(data)
 
