@@ -103,8 +103,6 @@ class Lamp:
     def route(self, route: str, domain: Union[str, bool] = None, method: list = []):
         def inner(func):
             
-            if route:
-                route = str(route)
             if domain:
                 domain = str(domain)
 
