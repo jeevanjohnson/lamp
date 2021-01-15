@@ -102,7 +102,7 @@ class Lamp:
 
     def route(self, route: str, domain: Union[str, bool] = None, method: list = []):
         def inner(func):
-            
+            nonlocal domain
             if domain:
                 domain = str(domain)
 
