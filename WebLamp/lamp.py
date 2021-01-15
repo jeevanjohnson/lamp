@@ -212,9 +212,9 @@ class Lamp:
                     exec('import re ; x = ' + k['domain'], x)
                     x = x['x'].match(req['Host'])
                     if x:
-                        r.append(False)
-                    else:
                         r.append(True)
+                    else:
+                        r.append(False)
 
                 elif req['Host'] == k['domain']:
                     r.append(True)
