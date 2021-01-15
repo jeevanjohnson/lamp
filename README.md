@@ -20,14 +20,15 @@ async def home(conn: Connection) -> bytes:
 server.run(("127.0.0.1", 5000))
 ```
 
-1 unique thing about this webserver is you can use a regex in your path/routes as show below
+1 unique thing about this webserver is you can use a regex in your route and domain!
 
 ```py
 from WebLamp import Lamp, Connection
+import re
 
 server = Lamp()
 
-@server.route(route = r'^/u/(?P<userid>[0-9]*)$', method = ['GET'])
+@server.route(route = re.compile(r'^/u/(?P<userid>[0-9]*)$'), method = ['GET'])
 async def home(conn: Connection) -> bytes:
 
     userid = conn.args['userid'] # this came from the regex that was provided
