@@ -288,7 +288,8 @@ class Lamp:
                     printc('Using uvloop!', Colors.Green)
                     uvloop.install()    
                 loop = asyncio.get_event_loop()
-                await asyncio.gather(*self.tasks)
+                for func in self.tasks:
+                    asyncio.create_task(func())
                 sock.bind(socket_type)
                 if isinstance(socket_type, str): 
                     os.chmod(socket_type, 0o777)
