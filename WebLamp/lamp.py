@@ -55,7 +55,7 @@ class Lamp:
         __slots__ = (
             'routes', 'error_handlers',
             'templateDir', 'regex',
-            'debug', 'uv'
+            'debug', 'uv', 'tasks'
         )
         self.routes = {}
         self.error_handlers = {}
@@ -66,6 +66,7 @@ class Lamp:
         }
         self.debug = False
         self.uv = False
+        self.tasks = []
          
     def renderTemplate(self, file, **kwargs):
         """
@@ -265,6 +266,7 @@ class Lamp:
         """
         self.debug = kwargs.get('debug', False)
         self.uv = kwargs.get('uvloop', False)
+        self.tasks = kwargs.get('tasks', [])
 
         if self.debug:
             printc('Debug Mode!', Colors.Green)
@@ -286,6 +288,7 @@ class Lamp:
                     printc('Using uvloop!', Colors.Green)
                     uvloop.install()    
                 loop = asyncio.get_event_loop()
+                await asyncio.gather(*self.tasks)
                 sock.bind(socket_type)
                 if isinstance(socket_type, str): 
                     os.chmod(socket_type, 0o777)
