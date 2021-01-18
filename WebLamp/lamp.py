@@ -236,6 +236,7 @@ class Lamp:
                 await loop.sock_sendall(client,
                     await self.routes[key](Connection(req, args))
                 )
+                client.close()
                 return
 
         if self.debug:
@@ -246,6 +247,7 @@ class Lamp:
             er = default_headers.get(404)
 
         await loop.sock_sendall(client, er)
+        client.close()
         return
 
     def run(self, socket_type: Union[str, tuple], **kwargs) -> None:
