@@ -3,7 +3,6 @@ from .utlies import printc, Colors
 from typing import Union
 import asyncio
 import socket
-import uvloop
 import json
 import os
 import re
@@ -288,6 +287,7 @@ class Lamp:
             with socket.socket(s) as sock:
                 if self.uv:
                     printc('Using uvloop!', Colors.Green)
+                    import uvloop
                     uvloop.install()    
                 loop = asyncio.get_event_loop()
                 for func in self.tasks:
