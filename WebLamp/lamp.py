@@ -1,307 +1,241 @@
-from .helper import http_status_codes, default_headers
-from .utlies import printc, Colors
+from asyncio import AbstractEventLoop
+from .helper import http_status_codes
+from .helper import default_headers
+from typing import Callable
+from .utils import Style
 from typing import Union
+from typing import Any
+from .utils import log
 import asyncio
 import socket
-import json
+import sys
 import os
 import re
 
-class TemplateFolderNotFound(Exception):
-    pass
+def write_response(code: int, body: bytes, headers: Union[tuple, list] = ()) -> bytes:
+    resp = f'HTTP/1.1 {code} {http_status_codes.get(code)}\r\n'
+    resp += f'Content-Length: {len(body)}\r\n'
+    for header in headers:
+        resp += header
 
-class TemplateNotFound(Exception):
-    pass
+    resp += '\r\n'
 
-class MultiPart:
-    def __init__(self) -> None:
-        """
-        Layout is just what data is representing, there indexes are 
-        the same just one tell you info about the other
-        """
-        self.layout = []
-        self.data = []
+    return resp.encode() + body
 
 class Connection:
-    def __init__(self, request: dict, args: dict = {}) -> None:
-        __slots__ = ('request', '_response', 'args')
-        self.request = request
-        self._response = ['HTTP/1.1 {status_code} {status}\r\n', '', b'\r\n', b'']
+    def __init__(self, req: dict, args: dict) -> None:
+        self._req = req
+        tmp = {k.lower().replace('-','_'): v for k, v in req.items()}
+        self.__dict__.update(**tmp)
         self.args = args
     
-    def set_status(self, code: int) -> None:
-        self._response[0] = self._response[0].format(status_code = code, status = http_status_codes.get(code))
+    def __getitem__(self, key: Any) -> Any:
+        return self._req[key]
 
-    def add_header(self, key, value) -> None:
-        self._response[1] += f'{key}: {value}\r\n'
-    
-    def set_body(self, body: bytes) -> None:
-        self._response[3] = body
-
-    @property
-    def response(self):
-        if 'Content-Length' not in self._response[1]:
-            self._response[1] += f'Content-Length: {len(self._response[3])}\r\n'
-        
-        r = b''
-        for x in self._response:
-            r += x.encode() if not isinstance(x, bytes) else x
-        
-        return r
-
-class Lamp:
-    def __init__(self) -> None:
-        __slots__ = (
-            'routes', 'error_handlers',
-            'templateDir', 'regex',
-            'debug', 'uv', 'tasks'
-        )
-        self.routes = {}
-        self.error_handlers = {}
-        self.templateDir = './templates'
-        self.regex = {
-            'htmlVars': re.compile(r'\[\[(.*)\]\]'),
-            'types': re.compile(r'^<(.*)>$')
-        }
-        self.debug = False
-        self.uv = False
-        self.tasks = []
-         
-    def renderTemplate(self, file, **kwargs):
-        """
-        There are problably better implementations of 
-        this type of stuff, but its always good to give
-        it a try!
-        """
-        if not os.path.exists(self.templateDir):
-            raise TemplateFolderNotFound()
-        if not os.path.exists(f"{self.templateDir}/{file}"):
-            raise TemplateNotFound()
-        
-        with open(f"{self.templateDir}/{file}", 'r') as f:
-            html = f.read().splitlines() # get content of html file
-            h = '\n'.join(html) # make a copy so py doesn't reference the html variable
-
-        for index, line in enumerate(h.splitlines()): # read every line to see if we need to parse it
-            
-            if (x := self.regex['htmlVars'].findall(line)):
-                for v in x:
-                    if (vv := v.strip()) in kwargs:
-                        line = line.replace(f"[[{v}]]", kwargs[vv])
-                html[index] = line
-
-            if 'link' in line and (x := self.regex['types'].findall(line)):
-                l = x[0].split()[1:]
-                link = {k: v[1:][:-1] for k, v in [z.split('=', 1) for z in l]}
-                if False not in [x in tuple(link) for x in ('type', 'rel', 'href')]:
-                    if (link['type'], link['rel']) == ('css', 'stylesheet'):
-                        with open(f"{self.templateDir}/{link.get('href')}", 'r') as css:
-                            html[index] = '<style>' + css.read() + '</style>'
-        
-        return '\n'.join(html)
-
-    def route(self, route: str, domain: Union[str, bool] = None, method: list = []):
-        def inner(func):
-            nonlocal domain
-            if domain:
-                domain = str(domain)
-
-            key = json.dumps({'route': str(route), 'domain': domain, 'method': method})
-
-            self.routes[key] = func
-            
-            return func
-        return inner
-
-    def error_handler(self, code: int):
-        def inner(func):
-
-            self.routes[code] = func
-            
-            return func
-        return inner
-    
-    def parse_multi(self, boundary: str, body: bytes) -> dict:
-        multi = MultiPart()
+class Multipart:
+    def __init__(self, body: bytes, boundary: str) -> None:
         body = [x for x in body.split(boundary.encode()) if x and x != b'--\r\n']
+        self.data = []
+        self.layout = []
+        for item in body:
+            arg, content = item.split(b'\r\n\r\n', 1)
+            for x in arg.decode().split('; '):
+                if 'Content-Disposition' in x or '=' not in x:
+                    continue
 
-        for arg in body:
-            data = []
-            layout = []
+                k, v = x.split('=', 1)
+                self.layout.append(k)
+                self.data.append(v[1:][:-1])
+            
+            self.data.append(content[:-2])
+            self.layout.append('data')
 
-            arg, content = arg.split(b'\r\n\r\n', 1)
-            arg = arg.decode().split('; ')[1:]
-
-            for x in arg:
-                x = x.split('=', 1)
-                x[1] = x[1].strip('"')
-                layout.append(x[0])
-                data.append(x[1])
-
-            layout.append('content')
-            data.append(content[:-2])
-            multi.layout.append(layout)
-            multi.data.append(data)
-
-        return multi
+class WebLamp:
+    def __init__(self) -> None:
+        self.error_handlers = {}
+        self.debug = True
+        self.routes = {}
+        self.uv = False
     
-    async def parse(self, req: bytes) -> dict:
-        r = {}
-        req = req.split(b'\r\n\r\n', 1)
-        for line in req[0].splitlines():
-            if 'http_vers' not in r:
-                r['method'], r['path'], r['http_vers'] = line.decode().split(' ')
-                if '?' not in r['path']:
-                    r['params'] = {}
-                else:
-                    r['path'], params = r['path'].split('?', 1)
-                    r['params'] = {
-                        k: v for k, v in [x.split('=', 1) for x in params.split('&')]
-                    }
-            else:
-                line = line.decode().split(': ')
-                r[line[0]] = line[1]
+    def error_handler(self, code: int) -> Callable:
+        if not isinstance(code, int):
+            raise Exception('Code must be an int!')
+        def inner(func: Callable)  -> Callable:
+            self.error_handler[code] = func
+            return func
+        return inner
+    
+    def route(self, path: Union[str, re.Pattern], 
+             domain: Union[str, re.Pattern, bool] = None, 
+             method: tuple = ()) -> Callable:
+        def inner(func: Callable) -> Callable:
+            nonlocal method
+            if not isinstance(path, (str, re.Pattern)) or isinstance(domain, (str, re.Pattern)):
+                raise Exception(
+                'Both `path` and `domain` need to be either a `str` '
+                'or a `re.Pattern`'
+                )
+            
+            if not isinstance(method, (list, tuple, set)):
+                raise Exception('`method` must be a list, tuple, or a set.')
+            
+            if isinstance(method, (list, set)):
+                method = tuple(method)
+
+            self.routes[(path, domain, method)] = func
+            return func
+        return inner
+    
+    def parse(self, data: bytes) -> dict:
+        req = {}
+        headers, body = data.split(b'\r\n\r\n', 1)
+        headers = headers.decode().splitlines()
         
-        if len(req) < 2:
-            r['body'] = b''
-        elif 'Content-Type' in r:
-            boundary = '--' + r['Content-Type'].split('; boundary=', 1)[1]
-            r['multipart'] = self.parse_multi(boundary, req[1])
+        method, path, http_vers = headers[0].split()
+        params = {}
+        if '?' in path:
+            split = path.split('?', 1)
+            if len(split) == 2:
+                path, _params = split
+                for param in _params.split('&'):
+                    if '=' not in param:
+                        continue
+                    
+                    k, v = param.split('=', 1)
+                    params[k] = v
+        
+        req.update({'method': method, 'path': path, 'params': params, 'http_vers': http_vers})
+
+        for header in headers[1:]:
+            k, v = header.split(': ', 1)
+            req[k] = v
+    
+        if 'Content-Type' in req:
+            boundary = '--' + req['Content-Type'].split('; boundary=', 1)[1]
+            req['multipart'] = Multipart(body, boundary)
         else:
-            r['body'] = req[1]
-        return r
+            req['body'] = body
+        
+        return req
 
-    async def handler(self, client, loop):
-        _req = await loop.sock_recv(client, 1024)
-        if not _req:
+    async def handle(self, client: socket.socket, loop: AbstractEventLoop) -> None:
+        data = await loop.sock_recv(client, 1024)
+        if not data:
             return
-        req = await self.parse(_req)        
+        req = self.parse(data)
         if 'Content-Length' in req:
-            c = int(req['Content-Length'])
-            if c > 1024:
-                _req += await loop.sock_recv(client, c)
-                req = await self.parse(_req)
-
-        for key in self.routes:
-            k = json.loads(key)
-            r = []
+            length = int(req['Content-Length'])
+            if length > 1024:
+                data += await loop.sock_recv(client, length)
+                req = self.parse(data)
+        
+        for key, func in self.routes.items():
+            path, domain, method = key
             args = {}
 
-            if k['route'].startswith('re.compile'):
-                x = {}
-                exec('import re ; x = ' + k['route'], x)
-                x = x['x'].match(req['path'])
+            if isinstance(path, re.Pattern):
+                x = path.search(req['path'])
                 if x:
                     args = x.groupdict()
-                    for K, V in args.items():
-                        if not K or not V:
-                            r.append(False)
-                        else:
-                            r.append(True)
+                    for k, v in args.items():
+                        if not k or not v:
+                            continue
                 else:
-                    r.append(False)
-            else:
-                if req['path'] == k['route']:
-                    r.append(True)
-                else:
-                    r.append(False)
-                
-            if k['domain'] and 'Host' in req:
-                if k['domain'].startswith('re.compile'):
-                    x = {}
-                    exec('import re ; x = ' + k['domain'], x)
-                    x = x['x'].match(req['Host'])
-                    if x:
-                        r.append(True)
-                    else:
-                        r.append(False)
+                    continue
 
-                elif req['Host'] == k['domain']:
-                    r.append(True)
-                else:
-                    r.append(False)
-
-            if k['method']:
-                if req['method'] in k['method']:
-                    r.append(True)
-                else:
-                    r.append(False)
-            
-            if False in r or True not in r:
+            elif path != req['path']:
                 continue
-            else:
-                if self.debug:
-                    printc(f"{req['Host']} | {req['path']} | {req['method']} | {req['http_vers']}", Colors.Green)
-                await loop.sock_sendall(client,
-                    await self.routes[key](Connection(req, args))
-                )
-                client.close()
-                return
+            
+            if domain and 'Host' in req:
+                if isinstance(domain, re.Pattern):
+                    x = path.search(req['Host'])
+                    if x:
+                        args = x.groupdict()
+                        for k, v in args.items():
+                            if not k or not v:
+                                continue
+                    else:
+                        continue
+                elif domain != req['Host']:
+                    continue
+
+            if method:
+                if req['method'] not in method:
+                    continue
+            
+            if self.debug:
+                log('Path: {path} | Host: {Host} | Method: {method}'.format(**req), Style.Green)
+            
+            r = await func(Connection(req, args))
+            r = write_response(*r)
+
+            await loop.sock_sendall(client, r)
+            client.close()
+            return
 
         if self.debug:
-            printc(f"{req['Host']} | {req['path']} | {req['method']} | {req['http_vers']}", Colors.Red)
+            log('Path: {path} | Host: {Host} | Method: {method}'.format(**req), Style.Red)
+        
         if 404 in self.error_handlers:
-            er = self.error_handlers[404](Connection(req))
+            r = write_response(*await self.error_handlers[404](Connection(req, args)))
         else:
-            er = default_headers.get(404)
-
-        await loop.sock_sendall(client, er)
+            r = default_headers.get(404)
+        
+        await loop.sock_sendall(client, r)
         client.close()
         return
 
-    def run(self, socket_type: Union[str, tuple], **kwargs) -> None:
-        """
-        socket_type: str or tuple
-            You can decide wheather you want your web server to be on a
-            unix socket or a normal ip and port.
-            Examples:
-                run(socket_type = '/tmp/cover.sock') <- unix_socket
-                run(socket_type = ("127.0.0.1", 5000)) <- ip and port
-        
-        debug: bool = False
-            All this does for right now is print on the console
-            all the request that are coming in, even the bad ones
-        
-        uvloop: bool = False
-            Free speed pretty much.
-        """
-        self.debug = kwargs.get('debug', False)
+    def run(self, bind: Union[tuple, str], **kwargs) -> None:
         self.uv = kwargs.get('uvloop', False)
-        self.tasks = kwargs.get('tasks', [])
-
-        if self.debug:
-            printc('Debug Mode!', Colors.Green)
-
+        self.debug = kwargs.get('debug', False)
+        listen = kwargs.get('listen', 5)
+        tasks = kwargs.get('tasks', [])
+        
         async def _run():
-            
-            if not isinstance(socket_type, (str, tuple)):
-                raise Exception('Only strings and tuples can be used for socket_type')
+            if not isinstance(bind, (tuple, str)):
+                raise Exception('`bind` must be either a string or a tuple!')
 
-            if isinstance(socket_type, str):
-                s = socket.AF_UNIX
-                if os.path.exists(socket_type):
-                    os.remove(socket_type)
+            if isinstance(bind, tuple):
+                running = 'IP: {}, PORT: {}'.format(*bind)
+                sock = socket.AF_INET
             else:
-                s = socket.AF_INET
-
-            with socket.socket(s) as sock:
-                if self.uv:
-                    printc('Using uvloop!', Colors.Green)
-                    import uvloop
-                    uvloop.install()    
-                loop = asyncio.get_event_loop()
-                for func in self.tasks:
-                    asyncio.create_task(func())
-                sock.bind(socket_type)
-                if isinstance(socket_type, str): 
-                    os.chmod(socket_type, 0o777)
-                sock.listen(5)
-                sock.setblocking(False)
+                running = bind
+                sock = socket.AF_UNIX
+                if os.path.exists(bind):
+                    os.remove(bind)
                 
-                printc(f"Server is up and running on: {socket_type}", Colors.Green)
+            with socket.socket(sock) as s:
+                loop = asyncio.get_event_loop()
+
+                for func in tasks:
+                    asyncio.create_task(func())
+
+                s.bind(bind)
+                if isinstance(bind, str):
+                    os.chmod(bind, 0o777)
+                s.listen(listen)
+                s.setblocking(False)
+
+                if self.uv:
+                    try: 
+                        import uvloop
+                        uvloop.install()
+                    except ImportError:
+                        major, minor = sys.version_info[:2]
+                        raise ImportError((
+                        "uvloop isn't installed! Please install by doing\n"
+                        f"python{major}.{minor} -m pip install"
+                        ))
+                    
+                    log('Using uvloop!', Style.Green)
+
+                if self.debug:
+                    log('Debug mode is on!', Style.Green)
+
+                log(f'Running HTTP sever on {running}', Style.Green)
 
                 while True:
-                    client, addr = await loop.sock_accept(sock)
-                    loop.create_task(self.handler(client, loop))
+                    client, addr = await loop.sock_accept(s)
+                    loop.create_task(self.handle(client, loop))
         
         asyncio.run(_run())
