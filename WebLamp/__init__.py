@@ -6,4 +6,4 @@ __version__ = '0.1'
 
 from .lamp import *
 from .helper import *
-from .utlies import *
+from .utils import *
