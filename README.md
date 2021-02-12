@@ -26,7 +26,7 @@ import re
 server = Lamp()
 
 @server.route(route = re.compile(r'^/u/(?P<userid>[0-9]*)$'), method = ['GET'])
-async def home(conn: Connection) -> bytes:
+async def home(conn: Connection) -> tuple:
 
     userid = conn.args['userid'] # this came from the regex that was provided
     
