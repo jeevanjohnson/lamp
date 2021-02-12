@@ -148,7 +148,7 @@ class Lamp:
             
             if domain and 'Host' in req:
                 if isinstance(domain, re.Pattern):
-                    x = path.search(req['Host'])
+                    x = domain.search(req['Host'])
                     if x:
                         args = x.groupdict()
                         for k, v in args.items():
