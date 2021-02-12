@@ -70,7 +70,7 @@ class Lamp:
              method: tuple = ()) -> Callable:
         def inner(func: Callable) -> Callable:
             nonlocal method
-            if not isinstance(path, (str, re.Pattern)) or isinstance(domain, (str, re.Pattern)):
+            if not isinstance(path, (str, re.Pattern)) or not isinstance(domain, (str, re.Pattern)):
                 raise Exception(
                 'Both `path` and `domain` need to be either a `str` '
                 'or a `re.Pattern`'
