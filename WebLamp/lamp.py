@@ -50,7 +50,7 @@ class Multipart:
             self.data.append(content[:-2])
             self.layout.append('data')
 
-class WebLamp:
+class Lamp:
     def __init__(self) -> None:
         self.error_handlers = {}
         self.debug = True
