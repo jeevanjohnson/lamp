@@ -9,7 +9,7 @@ from WebLamp import Lamp, Connection
 
 server = Lamp()
 
-@server.route(route = '/', method = ['GET'])
+@server.route(path = '/', method = ['GET'])
 async def home(conn: Connection) -> tuple:
 
     return 200, b'Hello World!'
@@ -25,7 +25,7 @@ import re
 
 server = Lamp()
 
-@server.route(route = re.compile(r'^/u/(?P<userid>[0-9]*)$'), method = ['GET'])
+@server.route(path = re.compile(r'^/u/(?P<userid>[0-9]*)$'), method = ['GET'])
 async def home(conn: Connection) -> tuple:
 
     userid = conn.args['userid'] # this came from the regex that was provided
