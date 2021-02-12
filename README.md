@@ -10,12 +10,9 @@ from WebLamp import Lamp, Connection
 server = Lamp()
 
 @server.route(route = '/', method = ['GET'])
-async def home(conn: Connection) -> bytes:
+async def home(conn: Connection) -> tuple:
 
-    conn.set_status(200)
-    conn.set_body(b'Hello World!')
-    
-    return conn.response
+    return 200, b'Hello World!'
 
 server.run(("127.0.0.1", 5000))
 ```
@@ -32,11 +29,8 @@ server = Lamp()
 async def home(conn: Connection) -> bytes:
 
     userid = conn.args['userid'] # this came from the regex that was provided
-
-    conn.set_status(200)
-    conn.set_body(f'{userid}'.encode())
     
-    return conn.response
+    return 200, userid.encode()
 
 server.run(("127.0.0.1", 5000))
 ```
