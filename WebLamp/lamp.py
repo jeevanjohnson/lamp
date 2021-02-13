@@ -16,7 +16,7 @@ def write_response(code: int, body: bytes, headers: Union[tuple, list] = ()) -> 
     resp = f'HTTP/1.1 {code} {http_status_codes.get(code)}\r\n'
     resp += f'Content-Length: {len(body)}\r\n'
     for header in headers:
-        resp += header
+        resp += header + '\r\n'
 
     resp += '\r\n'
 
