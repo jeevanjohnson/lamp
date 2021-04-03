@@ -66,7 +66,7 @@ class Lamp:
         return inner
     
     def route(self, path: Union[str, re.Pattern], 
-             domain: Union[str, re.Pattern, bool] = None, 
+             domain: Union[str, re.Pattern, bool] = False, 
              method: tuple = ()) -> Callable:
         def inner(func: Callable) -> Callable:
             nonlocal method
@@ -224,7 +224,7 @@ class Lamp:
                         major, minor = sys.version_info[:2]
                         raise ImportError((
                         "uvloop isn't installed! Please install by doing\n"
-                        f"python{major}.{minor} -m pip install"
+                        f"python{major}.{minor} -m pip install uvloop"
                         ))
                     
                     log('Using uvloop!', Style.Green)
