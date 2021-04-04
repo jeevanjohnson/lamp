@@ -6,10 +6,10 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
 	name = "WebLamp",
-	version = "0.2.5",
+	version = "0.2.6",
 	author = "coverosu",
 	author_email = email,
-	description = "Webserver (with some utilities) made in sockets!",
+	description = "A socket webserver made in python!",
 	long_description = long_description,
 	long_description_content_type = "text/markdown",
 	url = "https://github.com/coverosu/lamp",

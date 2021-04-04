@@ -1,16 +1,16 @@
-from asyncio import AbstractEventLoop
-from .helper import http_status_codes
-from .helper import default_headers
-from typing import Callable
-from .utils import Style
-from typing import Union
-from typing import Any
-from .utils import log
-import asyncio
-import socket
-import sys
 import os
 import re
+import sys
+import socket
+import asyncio
+from typing import Any
+from typing import Union
+from typing import Callable
+from asyncio import AbstractEventLoop
+
+from .utils import log
+from .utils import Style
+from .utils import http_status_codes
 
 def write_response(code: int, body: bytes, headers: Union[tuple, list] = ()) -> bytes:
     resp = f'HTTP/1.1 {code} {http_status_codes.get(code)}\r\n'
@@ -22,15 +22,63 @@ def write_response(code: int, body: bytes, headers: Union[tuple, list] = ()) -> 
 
     return resp.encode() + body
 
+class Route:
+    def __init__(self, path: Union[re.Pattern, str], 
+                method: Union[list, tuple, set], 
+                func: Callable) -> None:
+        self.path = path
+        self.methods = method
+        self.func = func
+    
+    def match(self, path: str) -> Union[bool, dict]:
+        if isinstance(self.path, re.Pattern):
+            x = self.path.search(path)
+            if not x:
+                return
+            
+            args = x.groupdict()
+            return args
+        else:
+            return self.path == path
+
+class Domain:
+    def __init__(self, domain: Union[re.Pattern, str, list, set, tuple]) -> None:
+        if not isinstance(domain, (re.Pattern, str, list, set, tuple)):
+            raise Exception(f'`domain` can not be this type! {type(domain)}')
+
+        self.domain: Union[re.Pattern, str, list, set, tuple] = domain
+        self.routes: list[Route] = []
+    
+    def add_route(self, path: Union[re.Pattern, str], method: Union[list, tuple, set]) -> Callable:
+        def inner(func: Callable) -> Callable:
+            self.routes.append(Route(path, method, func))
+            return func
+        return inner
+
+    def match(self, domain: str) -> bool:
+        if isinstance(self.domain, re.Pattern):
+            x = self.domain.search(domain)
+            if not x:
+                return False
+            
+            return True
+        elif isinstance(self.domain, (list, set, tuple)):
+            return domain in self.domain
+        else:
+            return self.domain == domain
+
 class Connection:
-    def __init__(self, req: dict, args: dict) -> None:
+    def __init__(self, req: dict, args: dict = {}) -> None:
         self._req = req
         tmp = {k.lower().replace('-','_'): v for k, v in req.items()}
         self.__dict__.update(**tmp)
         self.args = args
     
     def __getitem__(self, key: Any) -> Any:
-        return self._req[key]
+        return self.__dict__[key]
+
+    def __contains__(self, item: Any) -> bool:
+        return self.__dict__.__contains__(item)
 
 class Multipart:
     def __init__(self, body: bytes, boundary: str) -> None:
@@ -49,44 +97,15 @@ class Multipart:
             
             self.data.append(content[:-2])
             self.layout.append('data')
-
+    
 class Lamp:
     def __init__(self) -> None:
-        self.error_handlers = {}
-        self.debug = True
-        self.routes = {}
-        self.uv = False
+        self.domains: list[Domain] = []
     
-    def error_handler(self, code: int) -> Callable:
-        if not isinstance(code, int):
-            raise Exception('Code must be an int!')
-        def inner(func: Callable)  -> Callable:
-            self.error_handler[code] = func
-            return func
-        return inner
+    def add_domain(self, domain: Domain) -> None:
+        self.domains.append(domain)
     
-    def route(self, path: Union[str, re.Pattern], 
-             domain: Union[str, re.Pattern, bool] = False, 
-             method: tuple = ()) -> Callable:
-        def inner(func: Callable) -> Callable:
-            nonlocal method
-            if not isinstance(path, (str, re.Pattern)) or not isinstance(domain, (str, re.Pattern, bool)):
-                raise Exception(
-                'Both `path` and `domain` need to be either a `str` '
-                'or a `re.Pattern`'
-                )
-            
-            if not isinstance(method, (list, tuple, set)):
-                raise Exception('`method` must be a list, tuple, or a set.')
-            
-            if isinstance(method, (list, set)):
-                method = tuple(method)
-
-            self.routes[(path, domain, method)] = func
-            return func
-        return inner
-    
-    def parse(self, data: bytes) -> dict:
+    def parse(self, data: bytes) -> Connection:
         req = {}
         headers, body = data.split(b'\r\n\r\n', 1)
         headers = headers.decode().splitlines()
@@ -104,7 +123,10 @@ class Lamp:
                     k, v = param.split('=', 1)
                     params[k] = v
         
-        req.update({'method': method, 'path': path, 'params': params, 'http_vers': http_vers})
+        req['path'] = path
+        req['method'] = method
+        req['params'] = params
+        req['http_vers'] = http_vers
 
         for header in headers[1:]:
             k, v = header.split(': ', 1)
@@ -116,72 +138,49 @@ class Lamp:
         else:
             req['body'] = body
         
-        return req
+        return Connection(req)
 
-    async def handle(self, client: socket.socket, loop: AbstractEventLoop) -> None:
+    async def handle(self, client: socket.socket, loop: AbstractEventLoop):
         data = await loop.sock_recv(client, 1024)
         if not data:
             return
         req = self.parse(data)
-        if 'Content-Length' in req:
-            length = int(req['Content-Length'])
+        if 'content_length' in req:
+            length = int(req.content_length)
             if length > 1024:
                 data += await loop.sock_recv(client, length)
                 req = self.parse(data)
-        
-        for key, func in self.routes.items():
-            path, domain, method = key
-            args = {}
 
-            if isinstance(path, re.Pattern):
-                x = path.search(req['path'])
-                if x:
-                    args = x.groupdict()
-                    for k, v in args.items():
-                        if not k or not v:
-                            continue
-                else:
+        if (
+            'method' in req and 
+            'path' in req and
+            'host' in req
+            ):
+            
+            for domain in self.domains:
+                
+                if not domain.match(req.host):
                     continue
 
-            elif path != req['path']:
-                continue
-            
-            if domain and 'Host' in req:
-                if isinstance(domain, re.Pattern):
-                    x = domain.search(req['Host'])
-                    if x:
-                        args = x.groupdict()
-                        for k, v in args.items():
-                            if not k or not v:
-                                continue
-                    else:
+                for route in domain.routes:
+                    if not (args := route.match(req.path)):
                         continue
-                elif domain != req['Host']:
-                    continue
+                    
+                    if isinstance(args, dict):
+                        req.args = args
 
-            if method:
-                if req['method'] not in method:
-                    continue
+                    if req.method not in route.methods:
+                        continue
+                
+                    resp: tuple = await route.func(req)
+                    resp: bytes = write_response(*resp)
+
+                    await loop.sock_sendall(client, resp)
+                    client.close()
+                    return
             
-            if self.debug:
-                log('Path: {path} | Host: {Host} | Method: {method}'.format(**req), Style.Green)
-            
-            r = await func(Connection(req, args))
-            r = write_response(*r)
-
-            await loop.sock_sendall(client, r)
-            client.close()
-            return
-
-        if self.debug:
-            log('Path: {path} | Host: {Host} | Method: {method}'.format(**req), Style.Red)
-        
-        if 404 in self.error_handlers:
-            r = write_response(*await self.error_handlers[404](Connection(req, args)))
-        else:
-            r = default_headers.get(404)
-        
-        await loop.sock_sendall(client, r)
+        # Custom error handlers?
+        await loop.sock_sendall(client, write_response(404, b'Not Found'))
         client.close()
         return
 
@@ -224,7 +223,7 @@ class Lamp:
                         major, minor = sys.version_info[:2]
                         raise ImportError((
                         "uvloop isn't installed! Please install by doing\n"
-                        f"python{major}.{minor} -m pip install uvloop"
+                        f"python{major}.{minor} -m pip install"
                         ))
                     
                     log('Using uvloop!', Style.Green)
