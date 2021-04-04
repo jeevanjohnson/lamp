@@ -10,7 +10,6 @@ from typing import Callable
 from asyncio import AbstractEventLoop
 
 from .utils import log
-from .utils import Style
 from .utils import http_status_codes
 
 def write_response(code: int, body: bytes, headers: Union[tuple, list] = ()) -> bytes:
