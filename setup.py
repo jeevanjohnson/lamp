@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
 	name = "WebLamp",
-	version = "0.2.9",
+	version = "0.3.0",
 	author = "coverosu",
 	author_email = email,
 	description = "A socket webserver made in python!",

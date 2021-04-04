@@ -177,20 +177,22 @@ class Lamp:
                 await loop.sock_sendall(client, resp)
                 client.close()
 
-                log(
-                    msg = f'Path: {req.path} | Host: {req.host}, Method: {req.method}', 
-                    color = Fore.GREEN
-                )
+                if self.debug:
+                    log(
+                        msg = f'Path: {req.path} | Host: {req.host} | Method: {req.method}', 
+                        color = Fore.GREEN
+                    )
 
                 return
             
         # Custom error handlers?
         await loop.sock_sendall(client, write_response(404, b'Not Found'))
         client.close()
-        log(
-            msg = f'Path: {req.path} | Host: {req.host}, Method: {req.method}', 
-            color = Fore.RED
-        )
+        if self.debug:
+            log(
+                msg = f'Path: {req.path} | Host: {req.host} | Method: {req.method}', 
+                color = Fore.RED
+            )
         return
 
     def run(self, bind: Union[tuple, str], **kwargs) -> None:
