@@ -5,6 +5,7 @@ import socket
 import asyncio
 from typing import Any
 from typing import Union
+from colorama import Fore
 from typing import Callable
 from asyncio import AbstractEventLoop
 
@@ -151,37 +152,46 @@ class Lamp:
                 data += await loop.sock_recv(client, length)
                 req = self.parse(data)
 
-        if (
-            'method' in req and 
-            'path' in req and
-            'host' in req
-            ):
+        if not ('method' in req and 'path' in req and 'host' in req):
+            await loop.sock_sendall(client, b'')
+            client.close()
+            return
+
+        for domain in self.domains:
             
-            for domain in self.domains:
-                
-                if not domain.match(req.host):
+            if not domain.match(req.host):
+                continue
+
+            for route in domain.routes:
+                if not (args := route.match(req.path)):
                     continue
-
-                for route in domain.routes:
-                    if not (args := route.match(req.path)):
-                        continue
-                    
-                    if isinstance(args, dict):
-                        req.args = args
-
-                    if req.method not in route.methods:
-                        continue
                 
-                    resp: tuple = await route.func(req)
-                    resp: bytes = write_response(*resp)
+                if isinstance(args, dict):
+                    req.args = args
 
-                    await loop.sock_sendall(client, resp)
-                    client.close()
-                    return
+                if req.method not in route.methods:
+                    continue
+            
+                resp: tuple = await route.func(req)
+                resp: bytes = write_response(*resp)
+
+                await loop.sock_sendall(client, resp)
+                client.close()
+
+                log(
+                    msg = f'Path: {req.path} | Host: {req.host}, Method: {req.method}', 
+                    color = Fore.GREEN
+                )
+
+                return
             
         # Custom error handlers?
         await loop.sock_sendall(client, write_response(404, b'Not Found'))
         client.close()
+        log(
+            msg = f'Path: {req.path} | Host: {req.host}, Method: {req.method}', 
+            color = Fore.RED
+        )
         return
 
     def run(self, bind: Union[tuple, str], **kwargs) -> None:
@@ -223,15 +233,15 @@ class Lamp:
                         major, minor = sys.version_info[:2]
                         raise ImportError((
                         "uvloop isn't installed! Please install by doing\n"
-                        f"python{major}.{minor} -m pip install"
+                        f"python{major}.{minor} -m pip install uvloop"
                         ))
                     
-                    log('Using uvloop!', Style.Green)
+                    log('Using uvloop!', Fore.GREEN)
 
                 if self.debug:
-                    log('Debug mode is on!', Style.Green)
+                    log('Debug mode is on!', Fore.GREEN)
 
-                log(f'Running HTTP sever on {running}', Style.Green)
+                log(f'Running HTTP sever on {running}', Fore.GREEN)
 
                 while True:
                     client, addr = await loop.sock_accept(s)
